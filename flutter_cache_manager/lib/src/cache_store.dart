@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter_cache_manager/src/storage/file_system/file_system.dart';
 
 import '../flutter_cache_manager.dart';
-import 'storage/cache_object.dart';
 
 ///Flutter Cache Manager
 ///Copyright (c) 2019 Rene Floor
@@ -32,14 +32,12 @@ class CacheStore {
         _cacheInfoRepository = config.repo.open().then((value) => config.repo);
 
   Future<FileInfo?> getFile(String key, {bool ignoreMemCache = false}) async {
-    final cacheObject =
-        await retrieveCacheData(key, ignoreMemCache: ignoreMemCache);
+    final cacheObject = await retrieveCacheData(key, ignoreMemCache: ignoreMemCache);
     if (cacheObject == null) {
       return null;
     }
     final file = await fileSystem.createFile(cacheObject.relativePath);
-    cacheLogger.log(
-        'CacheManager: Loaded $key from cache', CacheManagerLogLevel.verbose);
+    cacheLogger.log('CacheManager: Loaded $key from cache', CacheManagerLogLevel.verbose);
 
     return FileInfo(
       file,
@@ -59,8 +57,7 @@ class CacheStore {
     }
   }
 
-  Future<CacheObject?> retrieveCacheData(String key,
-      {bool ignoreMemCache = false}) async {
+  Future<CacheObject?> retrieveCacheData(String key, {bool ignoreMemCache = false}) async {
     if (!ignoreMemCache && _memCache.containsKey(key)) {
       if (await _fileExists(_memCache[key])) {
         return _memCache[key];
@@ -94,8 +91,7 @@ class CacheStore {
       return null;
     }
     final file = await fileSystem.createFile(cacheObject.relativePath);
-    return FileInfo(
-        file, FileSource.Cache, cacheObject.validTill, cacheObject.url);
+    return FileInfo(file, FileSource.Cache, cacheObject.validTill, cacheObject.url);
   }
 
   Future<bool> _fileExists(CacheObject? cacheObject) async {
@@ -152,9 +148,13 @@ class CacheStore {
     final provider = await _cacheInfoRepository;
     final toRemove = <int>[];
     final allObjects = await provider.getAllObjects();
+
+    var futures = <Future>[];
     for (final cacheObject in allObjects) {
-      unawaited(_removeCachedFile(cacheObject, toRemove));
+      futures.add(_removeCachedFile(cacheObject, toRemove));
     }
+
+    await Future.wait(futures);
     await provider.deleteAll(toRemove);
   }
 
@@ -169,8 +169,7 @@ class CacheStore {
     await provider.deleteAll(toRemove);
   }
 
-  Future<void> _removeCachedFile(
-      CacheObject cacheObject, List<int> toRemove) async {
+  Future<void> _removeCachedFile(CacheObject cacheObject, List<int> toRemove) async {
     if (toRemove.contains(cacheObject.id)) return;
 
     toRemove.add(cacheObject.id!);
@@ -178,9 +177,10 @@ class CacheStore {
       _memCache.remove(cacheObject.key);
     }
     if (_futureCache.containsKey(cacheObject.key)) {
-      _futureCache.remove(cacheObject.key);
+      await _futureCache.remove(cacheObject.key);
     }
-    final file = await fileSystem.createFile(cacheObject.relativePath);
+
+    final file = io.File(cacheObject.relativePath);
     if (await file.exists()) {
       await file.delete();
     }
